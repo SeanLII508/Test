@@ -2,34 +2,28 @@ import socket
 import csv
 
 # Define the server address and port
-HOST = '127.0.0.1'  # Listen on the local loopback interface
-PORT = 30003
+HOST = '127.0.0.1'  # Address of the dump1090 server
+PORT = 30003        # Port of the dump1090 server
 
-# Function to start the server and handle connections
-def start_server():
+# Function to connect to the dump1090 server and handle the connection
+def connect_to_server():
     # Create a TCP/IP socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        # Bind the socket to the port
-        server_socket.bind((HOST, PORT))
-        # Listen for incoming connections
-        server_socket.listen(1)
-        print(f'Server listening on {HOST}:{PORT}')
-
-        # Accept a connection
-        conn, addr = server_socket.accept()
-        with conn:
-            print(f'Connected by {addr}')
-            with open('output.csv', mode='w', newline='') as file:
-                writer = csv.writer(file)
-                while True:
-                    # Receive data from the client
-                    data = conn.recv(1024)
-                    if not data:
-                        break
-                    # Assuming data is comma-separated values, split and write to CSV
-                    row = data.decode('utf-8').strip().split(',')
-                    writer.writerow(row)
-                    print(f'Received data: {row}')
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+        # Connect to the dump1090 server
+        client_socket.connect((HOST, PORT))
+        print(f'Connected to dump1090 server at {HOST}:{PORT}')
+        
+        with open('output.csv', mode='w', newline='') as file:
+            writer = csv.writer(file)
+            while True:
+                # Receive data from the server
+                data = client_socket.recv(1024)
+                if not data:
+                    break
+                # Assuming data is comma-separated values, split and write to CSV
+                row = data.decode('utf-8').strip().split(',')
+                writer.writerow(row)
+                print(f'Received data: {row}')
 
 if __name__ == '__main__':
-    start_server()
+    connect_to_server()

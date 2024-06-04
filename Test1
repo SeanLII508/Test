@@ -1,68 +1,27 @@
-import socket
-import csv
-from flask import Flask, render_template, Response
-from threading import Thread
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Messages</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .message { padding: 5px; margin: 5px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>Real-Time Messages</h1>
+    <div id="messages"></div>
 
-app = Flask(__name__)
-
-# Define the server address and port for receiving data from dump1090
-RECEIVE_HOST = '127.0.0.1'
-RECEIVE_PORT = 30003
-
-# Define the server address and port for forwarding data to the web server
-FORWARD_HOST = '127.0.0.1'
-FORWARD_PORT = 40000  # Choose an appropriate port number
-
-# A global list to store received messages
-messages = []
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/stream')
-def stream():
-    def event_stream():
-        while True:
-            if messages:
-                message = messages.pop(0)
-                yield f"data: {message}\n\n"
-    return Response(event_stream(), content_type='text/event-stream')
-
-def start_forwarding_server():
-    # Create a socket to connect to dump1090
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as receive_socket:
-        receive_socket.connect((RECEIVE_HOST, RECEIVE_PORT))
-        print(f'Connected to dump1090 server at {RECEIVE_HOST}:{RECEIVE_PORT}')
-        
-        # Create a socket to forward data to another program
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as forward_socket:
-            forward_socket.connect((FORWARD_HOST, FORWARD_PORT))
-            print(f'Connected to forwarding server at {FORWARD_HOST}:{FORWARD_PORT}')
-            
-            with open('output.csv', mode='w', newline='') as file:
-                writer = csv.writer(file)
-                while True:
-                    # Receive data from dump1090
-                    data = receive_socket.recv(1024)
-                    if not data:
-                        break
-                    # Decode and split the data
-                    row = data.decode('utf-8').strip().split(',')
-                    # Write data to CSV
-                    writer.writerow(row)
-                    print(f'Received data: {row}')
-                    # Forward data to the other program
-                    forward_socket.sendall(data)
-                    print(f'Forwarded data: {row}')
-                    # Add the data to the global list for web display
-                    messages.append(','.join(row))
-
-def run_flask_app():
-    app.run(debug=True, use_reloader=False)
-
-if __name__ == '__main__':
-    # Start the forwarding server in a separate thread
-    Thread(target=start_forwarding_server).start()
-    # Start the Flask web server
-    run_flask_app()
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        const eventSource = new EventSource('/stream');
+        eventSource.onmessage = function(event) {
+            const newMessage = document.createElement('div');
+            newMessage.className = 'message';
+            newMessage.textContent = event.data;
+            messagesDiv.appendChild(newMessage);
+        };
+    </script>
+</body>
+</html>

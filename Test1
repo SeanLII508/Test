@@ -1,79 +1,29 @@
 import socket
-import csv
-from flask import Flask, render_template, Response
-from threading import Thread
-import time
 
-app = Flask(__name__)
+# Define the server address and port for receiving forwarded data
+HOST = '127.0.0.1'
+PORT = 40000
 
-# Define the server address and port for receiving data from dump1090
-RECEIVE_HOST = '127.0.0.1'
-RECEIVE_PORT = 30003
+def start_receiving_server():
+    # Create a TCP/IP socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        # Bind the socket to the port
+        server_socket.bind((HOST, PORT))
+        # Listen for incoming connections
+        server_socket.listen(1)
+        print(f'Server listening on {HOST}:{PORT}')
 
-# Define the server address and port for forwarding data to the web server
-FORWARD_HOST = '127.0.0.1'
-FORWARD_PORT = 40000  # Choose an appropriate port number
-
-# A global list to store received messages
-messages = []
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/stream')
-def stream():
-    def event_stream():
-        while True:
-            if messages:
-                message = messages.pop(0)
-                print(f'Sending message to web client: {message}')  # Debug statement
-                yield f"data: {message}\n\n"
-            else:
-                time.sleep(1)  # Sleep briefly to avoid busy-waiting
-    return Response(event_stream(), content_type='text/event-stream')
-
-def start_forwarding_server():
-    # Create a socket to connect to dump1090
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as receive_socket:
-        receive_socket.connect((RECEIVE_HOST, RECEIVE_PORT))
-        print(f'Connected to dump1090 server at {RECEIVE_HOST}:{RECEIVE_PORT}')
-        
-        while True:
-            try:
-                # Create a socket to forward data to another program
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as forward_socket:
-                    forward_socket.connect((FORWARD_HOST, FORWARD_PORT))
-                    print(f'Connected to forwarding server at {FORWARD_HOST}:{FORWARD_PORT}')
-                    
-                    with open('output.csv', mode='w', newline='') as file:
-                        writer = csv.writer(file)
-                        while True:
-                            # Receive data from dump1090
-                            data = receive_socket.recv(1024)
-                            if not data:
-                                break
-                            # Decode and split the data
-                            row = data.decode('utf-8').strip().split(',')
-                            # Write data to CSV
-                            writer.writerow(row)
-                            print(f'Received data: {row}')
-                            # Forward data to the other program
-                            forward_socket.sendall(data)
-                            print(f'Forwarded data: {row}')
-                            # Add the data to the global list for web display
-                            message = ','.join(row)
-                            messages.append(message)
-                            print(f'Message appended to list: {message}')  # Debug statement
-            except ConnectionRefusedError:
-                print(f'Connection to forwarding server at {FORWARD_HOST}:{FORWARD_PORT} refused. Retrying...')
-                time.sleep(5)  # Wait before retrying
-
-def run_flask_app():
-    app.run(debug=True, use_reloader=False)
+        # Accept a connection
+        conn, addr = server_socket.accept()
+        with conn:
+            print(f'Connected by {addr}')
+            while True:
+                # Receive data from the client
+                data = conn.recv(1024)
+                if not data:
+                    break
+                # Process the received data
+                print(f'Received forwarded data: {data.decode("utf-8").strip()}')
 
 if __name__ == '__main__':
-    # Start the forwarding server in a separate thread
-    Thread(target=start_forwarding_server).start()
-    # Start the Flask web server
-    run_flask_app()
+    start_receiving_server()

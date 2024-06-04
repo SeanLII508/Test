@@ -61,10 +61,18 @@ def start_forwarding_server():
                             # Forward data to the other program
                             forward_socket.sendall(data)
                             print(f'Forwarded data: {row}')
-                            # Add the data to the global list for web display
-                            message = ','.join(row)
-                            messages.append(message)
-                            print(f'Message appended to list: {message}')  # Debug statement
+                            # Filter and format the data for display
+                            if len(row) >= 7:  # Ensure there are enough fields
+                                formatted_message = {
+                                    'hex': row[0],
+                                    'flight': row[1],
+                                    'altitude': row[3],
+                                    'speed': row[4],
+                                    'lat': row[5],
+                                    'lon': row[6]
+                                }
+                                messages.append(formatted_message)
+                                print(f'Message appended to list: {formatted_message}')  # Debug statement
             except ConnectionRefusedError:
                 print(f'Connection to forwarding server at {FORWARD_HOST}:{FORWARD_PORT} refused. Retrying...')
                 time.sleep(5)  # Wait before retrying

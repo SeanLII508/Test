@@ -2,6 +2,7 @@ import socket
 import csv
 from flask import Flask, render_template, Response
 from threading import Thread
+import time
 
 app = Flask(__name__)
 
@@ -26,7 +27,10 @@ def stream():
         while True:
             if messages:
                 message = messages.pop(0)
+                print(f'Sending message to web client: {message}')  # Debug statement
                 yield f"data: {message}\n\n"
+            else:
+                time.sleep(1)  # Sleep briefly to avoid busy-waiting
     return Response(event_stream(), content_type='text/event-stream')
 
 def start_forwarding_server():
@@ -35,28 +39,35 @@ def start_forwarding_server():
         receive_socket.connect((RECEIVE_HOST, RECEIVE_PORT))
         print(f'Connected to dump1090 server at {RECEIVE_HOST}:{RECEIVE_PORT}')
         
-        # Create a socket to forward data to another program
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as forward_socket:
-            forward_socket.connect((FORWARD_HOST, FORWARD_PORT))
-            print(f'Connected to forwarding server at {FORWARD_HOST}:{FORWARD_PORT}')
-            
-            with open('output.csv', mode='w', newline='') as file:
-                writer = csv.writer(file)
-                while True:
-                    # Receive data from dump1090
-                    data = receive_socket.recv(1024)
-                    if not data:
-                        break
-                    # Decode and split the data
-                    row = data.decode('utf-8').strip().split(',')
-                    # Write data to CSV
-                    writer.writerow(row)
-                    print(f'Received data: {row}')
-                    # Forward data to the other program
-                    forward_socket.sendall(data)
-                    print(f'Forwarded data: {row}')
-                    # Add the data to the global list for web display
-                    messages.append(','.join(row))
+        while True:
+            try:
+                # Create a socket to forward data to another program
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as forward_socket:
+                    forward_socket.connect((FORWARD_HOST, FORWARD_PORT))
+                    print(f'Connected to forwarding server at {FORWARD_HOST}:{FORWARD_PORT}')
+                    
+                    with open('output.csv', mode='w', newline='') as file:
+                        writer = csv.writer(file)
+                        while True:
+                            # Receive data from dump1090
+                            data = receive_socket.recv(1024)
+                            if not data:
+                                break
+                            # Decode and split the data
+                            row = data.decode('utf-8').strip().split(',')
+                            # Write data to CSV
+                            writer.writerow(row)
+                            print(f'Received data: {row}')
+                            # Forward data to the other program
+                            forward_socket.sendall(data)
+                            print(f'Forwarded data: {row}')
+                            # Add the data to the global list for web display
+                            message = ','.join(row)
+                            messages.append(message)
+                            print(f'Message appended to list: {message}')  # Debug statement
+            except ConnectionRefusedError:
+                print(f'Connection to forwarding server at {FORWARD_HOST}:{FORWARD_PORT} refused. Retrying...')
+                time.sleep(5)  # Wait before retrying
 
 def run_flask_app():
     app.run(debug=True, use_reloader=False)

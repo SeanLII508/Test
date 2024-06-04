@@ -6,21 +6,41 @@
     <title>Real-Time Messages</title>
     <style>
         body { font-family: Arial, sans-serif; }
-        .message { padding: 5px; margin: 5px; border: 1px solid #ddd; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
     </style>
 </head>
 <body>
     <h1>Real-Time Messages</h1>
-    <div id="messages"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Hex</th>
+                <th>Flight</th>
+                <th>Altitude</th>
+                <th>Speed</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+            </tr>
+        </thead>
+        <tbody id="messages"></tbody>
+    </table>
 
     <script>
-        const messagesDiv = document.getElementById('messages');
+        const messagesTable = document.getElementById('messages');
         const eventSource = new EventSource('/stream');
         eventSource.onmessage = function(event) {
-            const newMessage = document.createElement('div');
-            newMessage.className = 'message';
-            newMessage.textContent = event.data;
-            messagesDiv.appendChild(newMessage);
+            const data = JSON.parse(event.data);
+            const newRow = document.createElement('tr');
+
+            for (let key in data) {
+                const newCell = document.createElement('td');
+                newCell.textContent = data[key];
+                newRow.appendChild(newCell);
+            }
+
+            messagesTable.appendChild(newRow);
         };
     </script>
 </body>

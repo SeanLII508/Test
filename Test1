@@ -1,79 +1,36 @@
-import socket
-import csv
-from flask import Flask, render_template, Response
-from threading import Thread
-import time
+from flask import Flask, request, jsonify, render_template, Response
+import json
 
 app = Flask(__name__)
-
-# Define the server address and port for receiving data from dump1090
-RECEIVE_HOST = '127.0.0.1'
-RECEIVE_PORT = 30003
-
-# Define the server address and port for forwarding data to the web server
-FORWARD_HOST = '127.0.0.1'
-FORWARD_PORT = 40000  # Ensure this is the correct port
-
-# A global list to store received messages
-messages = []
+data_list = []
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/data', methods=['POST'])
+def receive_data():
+    global data_list
+    content = request.json
+    data_list.append(content)
+    return jsonify(success=True)
+
 @app.route('/stream')
 def stream():
     def event_stream():
         while True:
-            if messages:
-                message = messages.pop(0)
-                print(f'Sending message to web client: {message}')  # Debug statement
-                yield f"data: {message}\n\n"
-            else:
-                time.sleep(1)  # Sleep briefly to avoid busy-waiting
-    return Response(event_stream(), content_type='text/event-stream')
+            if data_list:
+                data = data_list.pop(0)
+                yield f"data: {json.dumps(data)}\n\n"
+    return Response(event_stream(), mimetype="text/event-stream")
 
-def start_forwarding_server():
-    # Create a socket to connect to dump1090
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as receive_socket:
-        receive_socket.connect((RECEIVE_HOST, RECEIVE_PORT))
-        print(f'Connected to dump1090 server at {RECEIVE_HOST}:{RECEIVE_PORT}')
-        
-        while True:
-            try:
-                # Create a socket to forward data to another program
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as forward_socket:
-                    forward_socket.connect((FORWARD_HOST, FORWARD_PORT))
-                    print(f'Connected to forwarding server at {FORWARD_HOST}:{FORWARD_PORT}')
-                    
-                    with open('output.csv', mode='w', newline='') as file:
-                        writer = csv.writer(file)
-                        while True:
-                            # Receive data from dump1090
-                            data = receive_socket.recv(1024)
-                            if not data:
-                                break
-                            # Decode and split the data
-                            row = data.decode('utf-8').strip().split(',')
-                            # Write data to CSV
-                            writer.writerow(row)
-                            print(f'Received data: {row}')
-                            # Forward data to the other program
-                            forward_socket.sendall(data)
-                            print(f'Forwarded data: {row}')
-                            # Add the data to the global list for web display
-                            message = ','.join(row)
-                            messages.append(message)
-                            print(f'Message appended to list: {message}')  # Debug statement
-            except ConnectionRefusedError:
-                print(f'Connection to forwarding server at {FORWARD_HOST}:{FORWARD_PORT} refused. Retrying...')
-                time.sleep(5)  # Wait before retrying
-
-def run_flask_app():
-    app.run(debug=True, use_reloader=False)
+@app.route('/export', methods=['GET'])
+def export_data():
+    global data_list
+    with open('data.txt', 'w') as file:
+        for entry in data_list:
+            file.write(json.dumps(entry) + '\n')
+    return jsonify(success=True, message='Data exported to data.txt')
 
 if __name__ == '__main__':
-    # Start the forwarding server in a separate thread
-    Thread(target=start_forwarding_server).start()
-    # Start the Flask web server
-    run_flask_app()
+    app.run(host='0.0.0.0', port=5000)

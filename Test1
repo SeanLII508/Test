@@ -16,6 +16,7 @@
     <table>
         <thead>
             <tr>
+                <th>Timestamp (ns)</th>
                 <th>Hex</th>
                 <th>Flight</th>
                 <th>Altitude</th>
@@ -34,11 +35,17 @@
             const data = JSON.parse(event.data);
             const newRow = document.createElement('tr');
 
-            for (let key in data) {
+            // Create and append timestamp cell
+            const timestampCell = document.createElement('td');
+            timestampCell.textContent = data.timestamp;
+            newRow.appendChild(timestampCell);
+
+            // Create and append other cells
+            ['hex', 'flight', 'altitude', 'speed', 'latitude', 'longitude'].forEach(key => {
                 const newCell = document.createElement('td');
                 newCell.textContent = data[key];
                 newRow.appendChild(newCell);
-            }
+            });
 
             messagesTable.appendChild(newRow);
         };

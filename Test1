@@ -1,40 +1,83 @@
-import subprocess
-import time
+#!/bin/bash
 
-def start_dump1090():
-    print("Starting dump1090...")
-    return subprocess.Popen(['./dump1090', '--net', '--interactive', '--loop', '--ifile', 'testfile/modes1.bin'])
+# Absolute paths to the programs and files
+DUMP1090_PATH="/path/to/dump1090"
+INPUT_FILE="/path/to/testfile/modes1.bin"
+RECEIVING_PROGRAM_PATH="/path/to/receiving_program.py"
+FLASK_APP_PATH="/path/to/tcp_to_json_flask.py"
 
-def start_receiving_program():
-    print("Starting receiving program...")
-    return subprocess.Popen(['python', 'receiving_program.py'])
+# Ports used by the programs
+DUMP1090_PORT=30003
+FLASK_PORT=40000
+FLASK_WEB_PORT=5000
 
-def start_flask_app():
-    print("Starting Flask app...")
-    return subprocess.Popen(['python', 'tcp_to_csv_flask.py'])
+# Function to clean up processes on exit
+cleanup() {
+    echo "Cleaning up..."
+    if [ -n "$DUMP1090_PID" ]; then
+        kill $DUMP1090_PID
+        echo "Stopped dump1090"
+    fi
+    if [ -n "$RECEIVING_PID" ]; then
+        kill $RECEIVING_PID
+        echo "Stopped receiving_program.py"
+    fi
+    if [ -n "$FLASK_PID" ]; then
+        kill $FLASK_PID
+        echo "Stopped tcp_to_json_flask.py"
+    fi
+    echo "Cleanup complete"
+}
 
-def main():
-    # Start dump1090
-    dump1090_process = start_dump1090()
-    time.sleep(5)  # Give dump1090 some time to start
+# Trap SIGINT and SIGTERM to cleanup
+trap cleanup SIGINT SIGTERM
 
-    # Start receiving program
-    receiving_program_process = start_receiving_program()
-    time.sleep(5)  # Give the receiving program some time to start
+# Start dump1090
+echo "Starting dump1090..."
+$DUMP1090_PATH --net --interactive --loop --ifile $INPUT_FILE &
+DUMP1090_PID=$!
+sleep 5
 
-    # Start Flask app
-    flask_app_process = start_flask_app()
+# Check if dump1090 started successfully
+if ! ps -p $DUMP1090_PID > /dev/null; then
+    echo "Failed to start dump1090"
+    exit 1
+fi
+echo "dump1090 started with PID $DUMP1090_PID"
 
-    # Wait for the processes to complete (they won't, since they're running servers)
-    try:
-        dump1090_process.wait()
-        receiving_program_process.wait()
-        flask_app_process.wait()
-    except KeyboardInterrupt:
-        print("Stopping all processes...")
-        dump1090_process.terminate()
-        receiving_program_process.terminate()
-        flask_app_process.terminate()
+# Start receiving program
+echo "Starting receiving_program.py..."
+python $RECEIVING_PROGRAM_PATH &
+RECEIVING_PID=$!
+sleep 5
 
-if __name__ == '__main__':
-    main()
+# Check if receiving_program.py started successfully
+if ! ps -p $RECEIVING_PID > /dev/null; then
+    echo "Failed to start receiving_program.py"
+    kill $DUMP1090_PID
+    exit 1
+fi
+echo "receiving_program.py started with PID $RECEIVING_PID"
+
+# Start Flask app
+echo "Starting tcp_to_json_flask.py..."
+python $FLASK_APP_PATH &
+FLASK_PID=$!
+sleep 5
+
+# Check if Flask app started successfully
+if ! ps -p $FLASK_PID > /dev/null; then
+    echo "Failed to start tcp_to_json_flask.py"
+    kill $DUMP1090_PID
+    kill $RECEIVING_PID
+    exit 1
+fi
+echo "tcp_to_json_flask.py started with PID $FLASK_PID"
+
+# Wait for all processes to complete
+wait $DUMP1090_PID
+wait $RECEIVING_PID
+wait $FLASK_PID
+
+# Cleanup on exit
+cleanup
